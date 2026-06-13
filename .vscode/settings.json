@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^/Users/zhangfengkai/Documents/pyhs/Regulation_RAG/\\.venv/bin/python src/main\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /Users/zhangfengkai/Documents/pyhs/Regulation_RAG && \\.venv/bin/python - <<'PY'\nimport asyncio\nfrom src import generator\n\nQUESTION = '請用一句話說明銀行法規的核心目的。'\nCONTEXT = '銀行法規的目的在於維護金融秩序並保護存款人權益。'\n\nasync def main\\(\\):\n    answer = await generator\\.generate_answer\\(QUESTION, CONTEXT\\)\n    print\\('answer=', answer\\)\n\n    parts = \\[\\]\n    async for chunk in generator\\.generate_stream\\(QUESTION, CONTEXT\\):\n        if 'error' in chunk:\n            print\\('stream_error=', chunk\\['error'\\]\\)\n            break\n        if 'text' in chunk:\n            parts\\.append\\(chunk\\['text'\\]\\)\n    print\\('stream_answer=', ''\\.join\\(parts\\)\\)\n\nasyncio\\.run\\(main\\(\\)\\)\nPY$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

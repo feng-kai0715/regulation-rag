@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智慧法規查詢平台 — Regulation RAG</title>
+  <style>
+    :root{--bg:#f4f7fb;--card:#ffffff;--panel:#eef3f9;--accent:#2563eb;--muted:#64748b;--glass:rgba(37,99,235,0.05)}
+    *{box-sizing:border-box}
+    body{font-family:Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Arial;font-size:16px;background:linear-gradient(180deg,#f8fbff 0%, #eef4fb 100%);color:#0f172a;margin:0;padding:24px}
+    .wrap{max-width:860px;margin:0 auto}
+    .header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+    h1{margin:0;font-size:1.125rem}
+    .subtitle{color:var(--muted);font-size:1rem;margin-top:6px;line-height:1.5}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .card{background:linear-gradient(180deg,var(--card),#fdfefe);border-radius:14px;padding:16px;border:1px solid rgba(15,23,42,0.08);margin-bottom:14px;box-shadow:0 8px 24px rgba(15,23,42,0.04)}
+    textarea{width:100%;height:120px;padding:12px;border-radius:10px;border:1px solid rgba(37,99,235,0.12);background:#fff;color:#0f172a;resize:vertical;font-size:16px;outline:none}
+    .controls{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+    button{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:700;font-size:16px}
+    button.ghost{background:transparent;border:1px solid rgba(37,99,235,0.15);color:var(--muted)}
+    #loading{display:none;color:var(--muted);margin-top:8px}
+    pre{white-space:pre-wrap;margin:0;color:#0f172a}
+    .history-list{max-height:420px;overflow:auto;margin-top:8px}
+    .history-item{padding:10px;border-radius:10px;background:#f8fbff;border:1px solid rgba(15,23,42,0.06);margin-bottom:8px;cursor:pointer}
+    .history-meta{font-size:12px;color:var(--muted);margin-top:6px}
+    input[type="search"]{padding:8px;border-radius:8px;border:1px solid rgba(37,99,235,0.12);background:#fff;color:#0f172a;font-size:16px}
+    .small{font-size:16px;color:var(--muted)}
+    .status{font-size:16px;color:var(--muted);margin-top:6px;min-height:1.2em}
+    body.dark{background:linear-gradient(180deg,#071028 0%, #0b1220 60%);color:#e6eef8}
+    body.dark .card{background:linear-gradient(180deg,#0b1220,#08111a);border:1px solid rgba(255,255,255,0.05);color:#e6eef8}
+    body.dark textarea{background:var(--glass);color:#e6eef8;border-color:rgba(255,255,255,0.08)}
+    body.dark button{color:#072039}
+    body.dark button.ghost{color:var(--muted);border-color:rgba(255,255,255,0.06);background:transparent}
+    body.dark pre{color:#e6eef8}
+    body.dark .history-item{background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.05)}
+    body.dark input[type="search"]{background:rgba(255,255,255,0.03);color:#e6eef8;border-color:rgba(255,255,255,0.06)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1>智慧法規查詢平台</h1>
+        <div class="subtitle">AI 法規問答系統，輸入問題後從法規資料中回傳回答與來源條款。</div>
+      </div>
+      <div class="toolbar">
+        <button id="clearHistory" class="ghost">清除紀錄</button>
+        <button id="themeToggle" class="ghost">切換主題</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label for="question">問題</label>
+      <textarea id="question" placeholder="請輸入你的問題，例如：第4條的原則是什麼？"></textarea>
+      <div class="controls">
+        <button id="ask">送出提問</button>
+        <button id="clear" class="ghost">清除輸入</button>
+        <div style="flex:1"></div>
+        <div id="loading">處理中…</div>
+        <div id="duration" class="small" style="margin-left:12px;align-self:center;color:var(--muted)"></div>
+      </div>
+      <div id="streamStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 10px 0">回答</h3>
+      <pre id="answer" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <h4 style="margin:16px 0 10px 0">來源（條款與重點）</h4>
+      <pre id="source" class="small"></pre>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 10px 0">查詢紀錄</h3>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input id="searchHistory" type="search" placeholder="搜尋紀錄（問題或回答）" style="flex:1" />
+      </div>
+      <div id="historyList" class="history-list small"></div>
+    </div>
+  </div>
+
+  <script>
+    const themeToggle = document.getElementById('themeToggle')
+    const THEME_KEY = 'rag_theme'
+    const STORAGE_KEY = 'rag_history'
+
+    function applyTheme(theme){
+      document.body.classList.toggle('dark', theme === 'dark')
+      themeToggle.textContent = theme==='dark' ? '切換亮色' : '切換深色'
+      localStorage.setItem(THEME_KEY, theme)
+    }
+
+    const initTheme = localStorage.getItem(THEME_KEY) || 'light'
+    applyTheme(initTheme)
+
+    themeToggle.addEventListener('click', ()=> applyTheme(document.body.classList.contains('dark') ? 'light' : 'dark'))
+
+    const askBtn = document.getElementById('ask')
+    const clearBtn = document.getElementById('clear')
+    const qEl = document.getElementById('question')
+    const aEl = document.getElementById('answer')
+    const sEl = document.getElementById('source')
+    const loading = document.getElementById('loading')
+    const streamStatus = document.getElementById('streamStatus')
+    const historyList = document.getElementById('historyList')
+    const searchHistory = document.getElementById('searchHistory')
+    const clearHistoryBtn = document.getElementById('clearHistory')
+    const durationEl = document.getElementById('duration')
+
+    function loadHistoryRaw(){
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    }
+    function saveHistoryRaw(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)) }
+    function escapeHtml(s){ return s ? s.replace(/[&<>\"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) : '' }
+    function setLoading(isLoading){ loading.style.display = isLoading ? 'inline-block' : 'none'; askBtn.disabled = isLoading }
+    function resetAnswerState(){ aEl.textContent = ''; sEl.textContent = ''; durationEl.textContent = ''; streamStatus.textContent = '' }
+
+    const RESPONSE_MODE = 'stream'
+
+    function renderHistory(filter=''){
+      const list = loadHistoryRaw()
+      const shown = list.filter(it => {
+        if(!filter) return true
+        const f = filter.toLowerCase()
+        return (it.question && it.question.toLowerCase().includes(f)) || (it.answer && it.answer.toLowerCase().includes(f))
+      })
+      if(!shown.length){ historyList.innerHTML = '<div class="small">尚無符合的紀錄。</div>'; return }
+      historyList.innerHTML = ''
+      shown.slice().reverse().forEach(it => {
+        const el = document.createElement('div')
+        el.className = 'history-item'
+        const meta = new Date(it.time).toLocaleString() + (it.duration ? (' · ' + it.duration + 's') : '')
+        el.innerHTML = `<div><strong>${escapeHtml(it.question)}</strong></div><div class='history-meta'>${meta}</div>`
+        el.addEventListener('click', ()=>{
+          qEl.value = it.question
+          ask(false)
+        })
+        historyList.appendChild(el)
+      })
+    }
+
+    function pushHistory(entry){
+      const list = loadHistoryRaw()
+      list.push(entry)
+      while(list.length>200) list.shift()
+      saveHistoryRaw(list)
+      renderHistory(searchHistory.value)
+    }
+
+    function splitSseFrames(buffer){
+      const frames = []
+      let separatorIndex = buffer.indexOf('\n\n')
+      while(separatorIndex !== -1){
+        frames.push(buffer.slice(0, separatorIndex))
+        buffer = buffer.slice(separatorIndex + 2)
+        separatorIndex = buffer.indexOf('\n\n')
+      }
+      return {frames, buffer}
+    }
+
+    async function ask(save=true){
+      const question = qEl.value.trim()
+      if(!question) return alert('請輸入問題')
+      setLoading(true)
+      resetAnswerState()
+      streamStatus.textContent = RESPONSE_MODE === 'stream' ? '已啟動串流回應，等待第一段內容…' : '等待完整回應…'
+      let collected = ''
+      let firstChunkShown = false
+      try{
+        const endpoint = RESPONSE_MODE === 'stream' ? '/stream_query' : '/query'
+        const res = await fetch(endpoint, {method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({question})})
+        if(!res.ok) throw new Error('伺服器錯誤：'+res.status)
+        if(RESPONSE_MODE !== 'stream'){
+          const data = await res.json()
+          aEl.textContent = data.answer || ''
+          if(data.source){ sEl.textContent = data.source }
+          if(data.duration != null){ durationEl.textContent = '耗時: '+data.duration+' 秒' }
+          streamStatus.textContent = '已完成非串流回應。'
+          if(save){
+            pushHistory({question, answer: data.answer || '', source: data.source || '', duration: data.duration ?? null, time: Date.now()})
+          }
+          return
+        }
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while(true){
+          const {value, done} = await reader.read()
+          buffer += decoder.decode(value || new Uint8Array(), {stream: !done})
+          const split = splitSseFrames(buffer)
+          buffer = split.buffer
+          for(const frame of split.frames){
+            const line = frame.trim()
+            if(!line.startsWith('data:')) continue
+            const payload = line.slice(5).trim()
+            if(!payload) continue
+            try{
+              const obj = JSON.parse(payload)
+              if(obj.text !== undefined){
+                if(!firstChunkShown){
+                  firstChunkShown = true
+                  streamStatus.textContent = '已收到第一段回應，持續串流中…'
+                }
+                collected += obj.text + "\n"
+                aEl.textContent = collected
+              }
+              if(obj.error){
+                aEl.textContent = '錯誤：'+obj.error
+                streamStatus.textContent = '串流失敗。'
+              }
+              if(obj.event === 'done'){
+                if(obj.duration != null){ durationEl.textContent = '耗時: '+obj.duration+' 秒' }
+                if(obj.source){ sEl.textContent = obj.source }
+                streamStatus.textContent = '串流完成。'
+                if(save){
+                  pushHistory({question, answer: collected || '', source: obj.source || '', duration: obj.duration ?? null, time: Date.now()})
+                }
+              }
+            }catch(e){
+              continue
+            }
+          }
+          if(done) break
+        }
+      }catch(e){ aEl.textContent = '錯誤：'+e.message }
+      finally{
+        if(!streamStatus.textContent) streamStatus.textContent = '回應結束。'
+        setLoading(false)
+      }
+    }
+
+    askBtn.addEventListener('click', ()=>ask(true))
+    clearBtn.addEventListener('click', ()=>{ qEl.value=''; aEl.textContent='尚未提問。'; sEl.textContent=''; durationEl.textContent='' })
+    searchHistory.addEventListener('input', ()=> renderHistory(searchHistory.value))
+
+    clearHistoryBtn.addEventListener('click', ()=>{
+      if(!confirm('確定要清除所有查詢紀錄嗎？')) return
+      localStorage.removeItem(STORAGE_KEY); renderHistory(searchHistory.value)
+    })
+
+    renderHistory('')
+  </script>
+</body>
+</html>
