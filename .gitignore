@@ -3,7 +3,3 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
-chroma_db/
