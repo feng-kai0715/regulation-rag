@@ -30,7 +30,7 @@ CHROMA_DIR = PROJECT_ROOT / "chroma_db"
 
 # Cache & timeout configuration
 CACHE_TTL_SECONDS = 1800  # 30 minutes
-LLM_TIMEOUT_SECONDS = 3.0
+LLM_TIMEOUT_SECONDS = 20.0
 
 # Content formatting limits
 SOURCE_PREVIEW_LIMIT = 200
@@ -220,14 +220,20 @@ async def _get_answer_with_fallback(request: QueryRequest, start_ts: float):
     except Exception as e:
         print(f"  ❌ Rule-based error: {e}", file=sys.stderr)
 
-    # Try generic article answer
-    try:
-        generic_answer = _build_generic_article_answer(results)
-        if generic_answer:
-            print(f"  ✅ Generic article answer found", file=sys.stderr)
-            return generic_answer, sources, results, key, "generic", time.time() - start_ts
-    except Exception as e:
-        print(f"  ❌ Generic article error: {e}", file=sys.stderr)
+    # 跨法規問題跳過 generic answer，直接走 LLM 以整合多部法規
+    _CROSS_LAW_KEYWORDS = ["個人資料保護法", "個資法", "資通安全管理法", "資安法",
+                           "銀行法", "金融", "勞動", "著作權", "消費者保護"]
+    is_cross_law_query = any(kw in request.question for kw in _CROSS_LAW_KEYWORDS)
+
+    # Try generic article answer（跨法規問題略過）
+    if not is_cross_law_query:
+        try:
+            generic_answer = _build_generic_article_answer(results)
+            if generic_answer:
+                print(f"  ✅ Generic article answer found", file=sys.stderr)
+                return generic_answer, sources, results, key, "generic", time.time() - start_ts
+        except Exception as e:
+            print(f"  ❌ Generic article error: {e}", file=sys.stderr)
 
     # No context available
     if not context:
