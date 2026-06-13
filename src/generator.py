@@ -3,10 +3,10 @@ import textwrap
 
 import anthropic
 
-MODEL_NAME = "claude-sonnet-4-6"
-TRUNCATE_CHARS = 800
+MODEL_NAME = "claude-haiku-4-5-20251001"
+TRUNCATE_CHARS = 600
 MAX_CONCURRENCY = 2
-MAX_TOKENS = 2048
+MAX_TOKENS = 400
 
 _semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
 _client = anthropic.Anthropic()
