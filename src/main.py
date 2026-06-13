@@ -201,7 +201,7 @@ async def _get_answer_with_fallback(request: QueryRequest, start_ts: float):
     
     try:
         context, sources, results, law_hint, key = load_query_state(
-            request.question, max_k=1
+            request.question, max_k=4
         )
         print(f"  📊 Context: {len(context) if context else 0} chars, Results: {len(results) if results else 0}", 
               file=sys.stderr)
