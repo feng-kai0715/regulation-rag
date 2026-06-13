@@ -3,7 +3,7 @@ import textwrap
 
 import anthropic
 
-MODEL_NAME = "claude-opus-4-8"
+MODEL_NAME = "claude-sonnet-4-6"
 TRUNCATE_CHARS = 800
 MAX_CONCURRENCY = 2
 MAX_TOKENS = 2048

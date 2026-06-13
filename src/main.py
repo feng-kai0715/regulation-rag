@@ -209,24 +209,24 @@ async def _get_answer_with_fallback(request: QueryRequest, start_ts: float):
         print(f"  ❌ load_query_state error: {e}", file=sys.stderr)
         raise
 
-    # Try rule-based answer
-    try:
-        rule_answer = build_rule_based_answer(request.question, results)
-        if rule_answer:
-            print(f"  ✅ Rule-based answer found", file=sys.stderr)
-            normalized = normalize_answer(rule_answer)
-            if normalized:
-                return normalized, sources, results, key, "rule", time.time() - start_ts
-    except Exception as e:
-        print(f"  ❌ Rule-based error: {e}", file=sys.stderr)
-
-    # 跨法規問題跳過 generic answer，直接走 LLM 以整合多部法規
+    # 跨法規問題偵測：提前判斷，跳過所有規則系統直接走 LLM
     _CROSS_LAW_KEYWORDS = ["個人資料保護法", "個資法", "資通安全管理法", "資安法",
                            "銀行法", "金融", "勞動", "著作權", "消費者保護"]
     is_cross_law_query = any(kw in request.question for kw in _CROSS_LAW_KEYWORDS)
 
-    # Try generic article answer（跨法規問題略過）
     if not is_cross_law_query:
+        # Try rule-based answer
+        try:
+            rule_answer = build_rule_based_answer(request.question, results)
+            if rule_answer:
+                print(f"  ✅ Rule-based answer found", file=sys.stderr)
+                normalized = normalize_answer(rule_answer)
+                if normalized:
+                    return normalized, sources, results, key, "rule", time.time() - start_ts
+        except Exception as e:
+            print(f"  ❌ Rule-based error: {e}", file=sys.stderr)
+
+        # Try generic article answer
         try:
             generic_answer = _build_generic_article_answer(results)
             if generic_answer:
@@ -234,6 +234,18 @@ async def _get_answer_with_fallback(request: QueryRequest, start_ts: float):
                 return generic_answer, sources, results, key, "generic", time.time() - start_ts
         except Exception as e:
             print(f"  ❌ Generic article error: {e}", file=sys.stderr)
+    else:
+        # 跨法規問題：仍執行邊界規則（boundary rules），但跳過其他規則
+        try:
+            from boundary_rules import try_build_boundary_answer
+            boundary_answer = try_build_boundary_answer(request.question.replace(" ", ""), {})
+            if boundary_answer:
+                print(f"  ✅ Boundary answer found (cross-law path)", file=sys.stderr)
+                normalized = normalize_answer(boundary_answer)
+                if normalized:
+                    return normalized, sources, results, key, "rule", time.time() - start_ts
+        except Exception as e:
+            print(f"  ❌ Boundary error: {e}", file=sys.stderr)
 
     # No context available
     if not context:
